@@ -8,13 +8,11 @@ app = Flask(__name__)
 
 
 
-app.config['JWT_SECRET_KEY'] = os.urandom(12).hex()
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY')
 
 CORS(app, supports_credentials=True)
 
 jwt = JWTManager(app)
-
-app.secret_key = os.urandom(24)
 
 app.register_blueprint(users_bp)
 

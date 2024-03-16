@@ -1,4 +1,5 @@
 import json
+from flask_jwt_extended import create_access_token
 from secrets import token_urlsafe
 from dotenv import load_dotenv
 from flask import jsonify, request, session
@@ -62,18 +63,15 @@ def login():
     if not usertoken:
         return jsonify({'message': 'Invalid email or password!'}), 401
 
-    
     usertoken = usertoken.decode('utf-8')
-    
-
     user_data = r.hget('users', usertoken)
     if user_data:
         user_schema = json.loads(user_data.decode('utf-8'))
         hashed_password = user_schema['hashed_password']
         if check_password_hash(hashed_password, password):
-            session['user'] = usertoken  # Store usertoken in the session
-            response = {'usertoken': usertoken, 'email': email, 'name': f"{user_schema['first_name']} {user_schema['last_name']}"}
-            return jsonify(response), 200
+            
+            access_token = create_access_token(identity=usertoken)
+            return jsonify(access_token=access_token, email=email,usertoken=usertoken), 200
 
     return jsonify({'message': 'Invalid email or password!'}), 401
 
@@ -90,13 +88,16 @@ def handle_user_ingredient_list():
     if not all([usertoken, name, id]):
         return jsonify({'error': 'Missing required data'}), 400
 
+    pantry_key = f"pantry:{usertoken}"  
+    ingredient_field = f"{name}:{id}"  
     try:
-        key = f"{usertoken}:{name}"
-        if r.hexists('pantries', key):
-            r.hdel('pantries', key)
+        if r.hexists(pantry_key, ingredient_field):
+            # If the ingredient exists, remove it
+            r.hdel(pantry_key, ingredient_field)
             action = 'deleted'
         else:
-            r.hset('pantries', key, id)
+            # If the ingredient does not exist, add it
+            r.hset(pantry_key, ingredient_field, 'true')  # Value 'true' is arbitrary
             action = 'added'
 
         return jsonify({'message': f'Ingredient {action} successfully'}), 200
@@ -111,21 +112,24 @@ def get_user_pantry_items():
     auth_header = request.headers.get('Authorization')
     if not auth_header:
         return jsonify({'message': 'Authorization token is missing!'}), 401
+    
     usertoken = auth_header.split(" ")[1]
 
-    
+    # This checks if the user exists which might not be necessary if you're only fetching from the pantry
+    # Consider removing if you don't store user data in 'users' or if it's not necessary for this operation
     user_data = r.hget('users', usertoken)
     if not user_data:
         return jsonify({'message': 'Invalid or expired usertoken!'}), 401
 
-    pantry_key_pattern = f"{usertoken}:*"
+    pantry_key = f"pantry:{usertoken}"
     pantry_items = []
-    for key in r.scan_iter(match=pantry_key_pattern):
-        item_id = r.hget('pantries', key.decode('utf-8'))
-        if item_id:
-            item_name = key.decode('utf-8').split(':')[1] 
-            pantry_items.append({'name': item_name, 'id': item_id.decode('utf-8')})
+
+    # Fetch all ingredients from the user's pantry hash
+    items = r.hgetall(pantry_key)
+    for item_key, _ in items.items():  # The value is ignored, assuming it's just a placeholder
+        # Assuming item_key is in the format 'name:id'
+        name, item_id = item_key.decode('utf-8').split(':')
+        pantry_items.append({'name': name, 'id': item_id})
 
     return jsonify(pantry_items), 200
-
 
