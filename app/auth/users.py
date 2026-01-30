@@ -4,7 +4,7 @@ from secrets import token_urlsafe
 from dotenv import load_dotenv
 from flask import jsonify, request, session
 from werkzeug.security import generate_password_hash, check_password_hash
-from .__init import users_bp
+from .__init__ import users_bp
 import os
 import redis
 
@@ -12,13 +12,13 @@ load_dotenv()
 
 password = os.environ.get('REDIS_PASSWORD')
 
-
-
-
 r = redis.Redis(
-  host='redis-10244.c323.us-east-1-2.ec2.cloud.redislabs.com',
-  port=10244,
-  password=password)
+    host='redis-18252.c275.us-east-1-4.ec2.cloud.redislabs.com',
+    port=18252,
+    decode_responses=True,
+    username='default',
+    password=password
+)
 
 
 
@@ -63,10 +63,9 @@ def login():
     if not usertoken:
         return jsonify({'message': 'Invalid email or password!'}), 401
 
-    usertoken = usertoken.decode('utf-8')
     user_data = r.hget('users', usertoken)
     if user_data:
-        user_schema = json.loads(user_data.decode('utf-8'))
+        user_schema = json.loads(user_data)
         hashed_password = user_schema['hashed_password']
         if check_password_hash(hashed_password, password):
             
@@ -128,7 +127,7 @@ def get_user_pantry_items():
     items = r.hgetall(pantry_key)
     for item_key, _ in items.items():  # The value is ignored, assuming it's just a placeholder
         # Assuming item_key is in the format 'name:id'
-        name, item_id = item_key.decode('utf-8').split(':')
+        name, item_id = item_key.split(':')
         pantry_items.append({'name': name, 'id': item_id})
 
     return jsonify(pantry_items), 200
